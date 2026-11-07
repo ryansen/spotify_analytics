@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classify, excluded, genreTags, similarity, layout, trackKey, songsFrom, heatmap, localDay, genreColor } from '../dist/exploration-data.js';
+import { classify, musicData, genreTags, similarity, layout, songsFrom, genreColor } from '../dist/exploration-data.js';
 const artists = [{ id:'a', name:'A', genres:['rock','art pop','rock'] },{id:'b',name:'B',genres:['rock']}];
 const a={id:'1',name:'One',artists:[{id:'a',name:'A'}]}, b={id:'2',name:'Two',artists:[{id:'a',name:'A'}]}, c={id:'3',name:'Three',artists:[{id:'b',name:'B'}]};
 test('genre enrichment joins artist IDs, deduplicates tags, and preserves unknowns',()=>{
@@ -22,37 +22,40 @@ test('layout is stable under input reordering and keeps every node within bounds
   assert.ok(first.every(p=>p.x>=45 && p.x<=755 && p.y>=35 && p.y<=425));
   assert.deepEqual(layout([],artists),[]);
 });
-test('classification recognizes explicit noise and ASMR labels without treating ordinary titles as noise',()=>{
-  for(const title of ['ASMR Whispering','Pink Noise for Sleep','White noise','Brown Noise','Rain sounds','Binaural beats']) assert.ok(classify({name:title}));
-  for(const title of ['Pink + White','Dreams','The Sound of Silence','Noises','Asmar']) assert.equal(classify({name:title}),null);
-  assert.match(classify({name:'Track 1',album:{name:'ASMR Sessions'}}),/album/);
+test('high-confidence ASMR and noise phrases handle punctuation and spacing',()=>{
+  for(const name of ['ASMR Whispering','A.S.M.R. — Ear Cleaning','ASMR - no-talking tapping','Pink-Noise for Deep Sleep',' WHITE   NOISE : 8 HOURS ','Brown noise (seamless loop)','Rain sounds for sleeping','Ocean Sounds — 60 minutes','Binaural beats for focus']) assert.ok(classify({name}), name);
 });
-test('classification overrides and toggle are reversible without mutating source tracks',()=>{
-  const track=Object.freeze({id:'noise',name:'Pink Noise'}),overrides=new Map();
-  assert.equal(excluded(track,false,overrides),false);assert.equal(excluded(track,true,overrides),true);
-  overrides.set(trackKey(track),'include');assert.equal(excluded(track,true,overrides),false);
-  overrides.set(trackKey(a),'exclude');assert.equal(excluded(a,true,overrides),true);assert.equal(excluded(a,false,overrides),false);
+test('ambiguous song names, musical versions, and broad genre words stay included',()=>{
+  for(const name of ['Pink + White','White Noise','Brown Noise','ASMR','Rain Sounds','Binaural Beats','Rain','Sleep','Ambient','Noise','The Sound of Silence','Noises','Asmar','Pink Noise Remix','ASMR (Song)','Ocean Sounds - Acoustic Version']) assert.equal(classify({name}),null,name);
+  assert.equal(classify({name:'Dreams',artists:[{name:'Sleep'}],album:{name:'Ambient Rain'}}),null);
+  assert.equal(classify({...a,name:'Dreams'},[{...artists[0],genres:['ambient','noise rock','sleep','meditation']}]),null);
 });
-test('song union deduplicates tracks while heatmap retains separate listening events',()=>{
+test('specific genres and independent album or artist evidence support exclusion',()=>{
+  assert.ok(classify({name:'Track 1',album:{name:'ASMR Sessions'}}));
+  assert.ok(classify({name:'Rain Sounds',album:{name:'Sleep Sounds'}}));
+  assert.ok(classify({name:'White Noise',artists:[{name:'Sleep Sounds Studio'}]}));
+  assert.ok(classify({name:'Track 1',album:{name:'Brown Noise for Babies'}}));
+  assert.ok(classify({...a,name:'Untitled'},[{...artists[0],genres:['sound effects']}]));
+  assert.ok(classify({name:'Whispers',artists:[{name:'X',genres:['asmr']}]}));
+  // Never combine fragments across separate metadata fields into a phrase.
+  assert.equal(classify({name:'White',album:{name:'Noise'},artists:[{name:'Rain'}]}),null);
+  assert.equal(classify({...a,name:'ASMR Song'},[{...artists[0],genres:['asmr']}]),null);
+});
+test('one automatic derived dataset consistently filters song views without changing raw responses or artist rankings',()=>{
+  const noise={id:'noise',name:'Pink Noise for Sleep'}, fromGenre={id:'genre',name:'Track 1',artists:[{id:'noise-artist'}]};
+  const artistList=[...artists,{id:'noise-artist',name:'Sound Studio',genres:['white noise']}];
+  const data={tracks:[noise,a,fromGenre,b],artists:artistList,recent:{items:[{track:noise},{track:c},{track:fromGenre},{track:null}],cursors:{after:'123'}}};
+  const before=JSON.stringify(data), music=musicData(data);
+  assert.deepEqual(music.tracks,[a,b]);
+  assert.deepEqual(music.recent.items,[{track:c}]);
+  assert.deepEqual(songsFrom(music),[a,b,c]);
+  assert.equal(music.tracks[0],a); // Highlights and lists share this filtered ranking.
+  assert.equal(music.recent.items[0].track,c);
+  assert.equal(music.artists,artistList);
+  assert.equal(music.recent.cursors,data.recent.cursors);
+  assert.equal(JSON.stringify(data),before);
+  assert.deepEqual(musicData({}).tracks,[]);
+});
+test('song union deduplicates tracks and ignores missing recent tracks',()=>{
   assert.equal(songsFrom({tracks:[a],recent:{items:[{track:a},{track:b},{track:null}]}}).length,2);
-});
-const play=(track,day,hour)=>({track,played_at:new Date(2026,10,day,hour,0).toISOString()});
-test('each multi-genre play counts once; zero observed cells differ from unknown coverage',()=>{
-  const raw=[play(a,2,9),play(a,2,10),play(c,3,9),{track:b,played_at:null},{track:b,played_at:'bad'}];
-  const m=heatmap(raw,artists,{start:'2026-11-01',end:'2026-11-04'});
-  assert.equal([...m.cells.values()].reduce((sum,x)=>sum+x.length,0),3);
-  assert.equal(m.cells.get(JSON.stringify(['art pop','2026-11-02'])).length,2);
-  assert.equal(m.cells.has(JSON.stringify(['rock','2026-11-02'])),false);
-  assert.equal(m.observed.has('2026-11-02'),true);assert.equal(m.observed.has('2026-11-01'),false);
-  assert.equal(m.totals.get('2026-11-02'),2);
-});
-test('heatmap date and hour filters use local dates; exclusion preserves coverage and unknown genres',()=>{
-  const noise={id:'n',name:'Pink noise'},raw=[play(a,2,9),play(noise,3,11)];
-  const options={start:localDay(raw[0].played_at),end:'2026-11-03',mode:'hours',hideNoise:true};
-  const m=heatmap(raw,artists,options);
-  assert.equal(m.columns.length,24);assert.equal(m.included.length,1);assert.equal(m.observed.has('11'),true);
-  assert.equal(m.totals.has('11'),false);
-  const unknown=heatmap(raw,[],{start:'2026-11-03',end:'2026-11-03'});assert.deepEqual(unknown.rows,['Unknown']);
-  assert.equal(unknown.included.length,1);
-  const empty=heatmap(raw,artists,{start:'2026-11-04',end:'2026-11-03'});assert.equal(empty.columns.length,0);assert.equal(empty.included.length,0);
 });
