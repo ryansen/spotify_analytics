@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A quieter place to explore your Spotify top tracks, favorite artists, and recent listening.">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://i.scdn.co https://mosaic.scdn.co https://image-cdn-ak.spotifycdn.com https://image-cdn-fa.spotifycdn.com data:; connect-src 'self' https://accounts.spotify.com https://api.spotify.com; base-uri 'none'; form-action 'self'; object-src 'none'">
+  <title>Listening Room — Your music, in perspective</title>
+  <link rel="icon" href="./dist/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./dist/style.css">
+  <script type="module" src="./dist/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="./" aria-label="Listening Room home"><span class="brandmark">lr<span>↗</span></span><span>LISTENING<br>ROOM</span></a>
+    <div class="nav-label">YOUR COLLECTION</div>
+    <nav aria-label="Dashboard">
+      <button class="nav active" data-view="overview"><span>◫</span> Overview</button>
+      <button class="nav" data-view="tracks"><span>♫</span> Top tracks</button>
+      <button class="nav" data-view="artists"><span>◎</span> Top artists</button>
+      <button class="nav" data-view="recent"><span>◷</span> Recent listening</button>
+    </nav>
+    <div class="sidebar-note"><span class="small-star">✳</span><p>Every song<br>leaves a little trace.</p><small>Make room for your music.</small></div>
+    <button class="privacy-link" id="privacy-button">Privacy & connection</button>
+    <div class="session"><span class="status-dot"></span><span id="session-label">Preview mode</span></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>YOUR PERSONAL MUSIC JOURNAL</span><div class="account"><span id="profile-name">Welcome in.</span><button id="connect" class="connect">Connect Spotify <span>↗</span></button><button id="disconnect" class="secondary hidden">Disconnect</button></div></header>
+    <div id="notice" class="notice hidden" role="status"></div>
+    <section class="hero">
+      <div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span> A LITTLE CLOSER TO YOUR MUSIC</div><h1>Your music,<br>in <em>perspective.</em></h1><p id="hero-description">The songs you return to. The artists that stay.<br>A space to explore what’s been on your mind.</p><div class="hero-bottom"><span id="mode-badge" class="badge">ILLUSTRATIVE PREVIEW</span><span id="mode-description">Connect to make this room yours.</span></div></div>
+      <div class="record-art" aria-hidden="true"><div class="record-jacket"><span>THE LISTENING ROOM</span><div class="jacket-sun"></div><div class="jacket-land"></div><small>VOLUME 01<br>A PERSONAL COLLECTION</small></div><div class="vinyl"><div class="vinyl-label">lr<br><small>SIDE A</small></div></div><span class="art-caption">A SOUNDTRACK, UNIQUELY YOURS.</span></div>
+    </section>
+    <section class="section-heading"><div><span class="eyebrow">THE BIG PICTURE</span><h2 id="view-title">In your rotation</h2></div><div class="ranges" role="group" aria-label="Ranking time range"><button class="selected" data-range="short_term" aria-pressed="true">4 weeks</button><button data-range="medium_term" aria-pressed="false">6 months</button><button data-range="long_term" aria-pressed="false">~1 year</button></div></section>
+    <div id="loading" class="loading hidden" role="status">Opening your collection…</div>
+    <section class="highlights" id="highlights" aria-label="Collection highlights"></section>
+    <section class="collection-grid">
+      <article class="panel tracks-panel"><div class="panel-heading"><div><span class="eyebrow">ON REPEAT</span><h3 id="list-title">The songs that stick</h3></div><label class="search-label"><span class="sr-only">Search this list</span><input id="search" type="search" placeholder="Find in this list…" autocomplete="off"></label></div><div id="track-list" class="track-list"></div><div class="panel-foot" id="list-foot">Illustrative rankings · connect to see yours</div></article>
+      <article class="panel artists-panel"><div class="panel-heading"><div><span class="eyebrow" id="side-eyebrow">FAMILIAR VOICES</span><h3 id="side-title">Your leading artists</h3></div><span class="arrow-circle">↗</span></div><div id="artist-list"></div><div class="source-note"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="currentColor"/><path d="M5 8.4c4-1.2 9-1 13 1M6 12c3-1 7-.7 11 1M7 15.5c3-.6 6-.4 9 .7" stroke="var(--paper)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span id="source-label">Built for your Spotify collection</span></div></article>
+    </section>
+    <section class="bottom-note"><span>↳</span><p id="coverage-note">This is an illustrative preview. Connect Spotify to load your own rankings and recent listening.</p><button id="refresh" class="text-button">Refresh data ↻</button></section>
+    <footer><span>LISTENING ROOM <span class="footer-dot">•</span> A SPACE FOR YOUR SOUND</span><span>Made for listening a little closer.</span></footer>
+  </main>
+  <dialog id="privacy-dialog"><button id="close-dialog" class="dialog-close" aria-label="Close privacy information">×</button><div class="eyebrow">YOUR MUSIC, YOUR CONTROL</div><h2>A private listening room.</h2><p>This version requests read-only access to your Spotify top artists, top tracks, and recently played tracks. It cannot edit playlists, control playback, or see your password.</p><p>Access and refresh tokens stay in this tab’s memory. They are never saved to browser storage or sent to this website’s server. Reloading or closing the tab ends the local session. Only the short-lived login verifier and state are temporarily stored in session storage.</p><p>Disconnect clears this tab’s data. To revoke Spotify authorization too, remove Listening Room from <a href="https://www.spotify.com/account/apps/" target="_blank" rel="noopener noreferrer">your Spotify connected apps</a>.</p><p>Listening Room does not send your listening data to AI models or analytics services. This beta displays Spotify-returned rankings and records. Complete listening hours, lifetime play counts, genres, and recommendations are not available in this version.</p><div class="redirect-box"><small>SPOTIFY REDIRECT URI FOR THIS ADDRESS</small><code id="redirect-value"></code><button id="copy-redirect" class="secondary">Copy redirect URI</button></div><p class="small">For a new developer app, add this exact URI in its settings and add your Spotify account under Users and Access if needed.</p></dialog>
+</body>
+</html>
