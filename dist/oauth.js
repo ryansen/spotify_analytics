@@ -58,16 +58,17 @@ export async function completeLogin() {
 }
 export function clearPendingLogin() { sessionStorage.removeItem(PENDING); }
 
-export function createSpotifyClient(initialToken, fetcher = fetch, now = () => Date.now()) {
+export function createSpotifyClient(initialToken, fetcher = fetch, now = () => Date.now(), session = null) {
   let token = initialToken;
-  let expiresAt = now() + token.expires_in * 1000;
+  let expiresAt = token.expires_at ?? now() + token.expires_in * 1000;
+  session?.save({ ...token, expires_at: expiresAt });
   let refreshPromise;
   let closed = false;
   const cache = new Map();
   async function refresh() {
     if (!token.refresh_token) throw new Error('Your session ended. Please reconnect to Spotify.');
     if (!refreshPromise) refreshPromise = tokenRequest({ grant_type: 'refresh_token', refresh_token: token.refresh_token }, fetcher)
-      .then(next => { if (closed) throw new Error('Disconnected.'); token = { ...next, refresh_token: next.refresh_token || token.refresh_token }; expiresAt = now() + next.expires_in * 1000; })
+      .then(next => { if (closed) throw new Error('Disconnected.'); token = { ...next, refresh_token: next.refresh_token || token.refresh_token }; expiresAt = now() + next.expires_in * 1000; session?.save({ ...token, expires_at: expiresAt }); })
       .finally(() => { refreshPromise = null; });
     await refreshPromise;
   }
@@ -94,5 +95,5 @@ export function createSpotifyClient(initialToken, fetcher = fetch, now = () => D
     cache.set(path, { data, at: now() });
     return data;
   }
-  return { get, close() { closed = true; token = {}; cache.clear(); } };
+  return { get, close({ forget = true } = {}) { closed = true; token = {}; cache.clear(); if (forget) session?.clear(); } };
 }

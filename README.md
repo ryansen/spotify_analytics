@@ -6,7 +6,7 @@ Register this exact Spotify redirect URI, including its trailing slash:
 
 https://ryansen.github.io/spotify_analytics/
 
-The public Client ID is configured in dist/config.js. No Client Secret is required. Tokens stay in tab memory. Genre enrichment and recommendations are future milestones. The pre-login dashboard is explicitly illustrative.
+The public Client ID is configured in dist/config.js. No Client Secret is required. Tokens stay in tab session storage so refreshes preserve the connection; Disconnect clears them. Genre enrichment and recommendations are future milestones. The pre-login dashboard is explicitly illustrative.
 
 Run locally with `node server.mjs`; test with `node --test tests/*.test.mjs`.
 

@@ -1,6 +1,8 @@
 import { beginLogin, completeLogin, createSpotifyClient, clearPendingLogin } from './oauth.js';
+import { createSessionStore } from './session.js';
 import { redirectUri } from './config.js';
 
+const session = createSessionStore(window.sessionStorage);
 const $ = id => document.getElementById(id);
 const ranges = { short_term: 'last 4 weeks', medium_term: 'last 6 months', long_term: 'approximately 1 year' };
 const samples = [
@@ -149,7 +151,7 @@ $('connect').addEventListener('click', async () => {
 });
 $('disconnect').addEventListener('click', () => {
   generation++; client?.close(); client = null; connected = false; data = { ...demo }; errors = {}; lastLoaded = null;
-  clearPendingLogin(); $('profile-name').textContent = 'Welcome in.'; $('loading').classList.add('hidden'); $('refresh').disabled = false; $('search').value = '';
+  session.clear(); clearPendingLogin(); $('profile-name').textContent = 'Welcome in.'; $('loading').classList.add('hidden'); $('refresh').disabled = false; $('search').value = '';
   notice('Disconnected. Your session and loaded data have been cleared from this tab.'); render();
 });
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {view = button.dataset.view; $('search').value = ''; render();}));
@@ -171,8 +173,13 @@ $('copy-redirect').addEventListener('click', async () => {
 });
 render();
 try {
-  const tokens = await completeLogin();
-  if (tokens) { client = createSpotifyClient(tokens); connected = true; data = {}; render(); await load(); }
+  const tokens = await completeLogin() || session.load();
+  if (tokens) { client = createSpotifyClient(tokens, fetch, () => Date.now(), session); connected = true; data = {}; render(); await load(); }
 } catch (error) { notice(error.message); }
-window.addEventListener('pagehide', () => { generation++; client?.close(); client = null; connected = false; });
-window.addEventListener('pageshow', event => { if (event.persisted) { data = { ...demo }; errors = {}; $('profile-name').textContent = 'Welcome in.'; notice('This tab’s session ended. Reconnect Spotify to load your collection.'); render(); } });
+window.addEventListener('pagehide', () => { generation++; client?.close({ forget: false }); client = null; connected = false; });
+window.addEventListener('pageshow', async event => {
+  if (!event.persisted) return;
+  const tokens = session.load();
+  if (tokens) { client = createSpotifyClient(tokens, fetch, () => Date.now(), session); connected = true; data = {}; render(); await load(); }
+  else { data = { ...demo }; errors = {}; $('profile-name').textContent = 'Welcome in.'; render(); }
+});
