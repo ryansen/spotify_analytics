@@ -1,6 +1,8 @@
 import { beginLogin, completeLogin, createSpotifyClient, clearPendingLogin } from './oauth.js';
 import { createSessionStore } from './session.js';
 import { redirectUri } from './config.js';
+import { createExploration } from './exploration.js';
+import { classify, songsFrom } from './exploration-data.js';
 
 const session = createSessionStore(window.sessionStorage);
 const $ = id => document.getElementById(id);
@@ -17,6 +19,11 @@ const demo = {
   artists: ['Frank Ocean', 'Radiohead', 'Beach House', 'Fleetwood Mac'].map(name => ({ name, demo: true })),
   recent: { items: samples.slice(0, 4).map(([name, artist, album, duration_ms]) => ({ track: { name, artists: [{ name: artist }], album: { name: album }, duration_ms, demo: true }, played_at: null })) }
 };
+// These tags and timestamps are authored fixtures, never Spotify account data.
+const demoGenres = { 'Frank Ocean': ['alternative r&b'], Radiohead: ['art rock', 'alternative rock'], 'Beach House': ['dream pop'], 'Fleetwood Mac': ['soft rock'] };
+demo.artists.forEach(a => { a.genres = demoGenres[a.name]; });
+demo.tracks.push({ name: 'Pink Noise for Sleep', artists: [{ name: 'Demo Sound Studio' }], album: { name: 'Illustrative soundscape' }, demo: true });
+demo.recent.items = Array.from({length:30}, (_,i) => ({track:demo.tracks[i%demo.tracks.length], played_at:new Date(2026,10,2+i%5,8+(i*3)%15,i%60).toISOString()})).sort((a,b)=>b.played_at.localeCompare(a.played_at));
 let client;
 let connected = false;
 let view = 'overview';
@@ -57,6 +64,7 @@ function cover(item, index, artist = false) {
   return el('span', `cover cover-art c${index % 5}`, artist ? (item.name || '?')[0] : '♫');
 }
 function artistNames(item) { return item.artists?.map(x => x.name).join(', ') || 'Unknown artist'; }
+const exploration = createExploration({ el, cover, linkedName, onFilter: () => render() });
 function duration(ms) { if (!Number.isFinite(ms)) return ''; return `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`; }
 function highlight(label, title, detail, icon) {
   const card = el('article', 'highlight'); card.append(el('div', 'eyebrow', label), el('span', 'card-icon', icon), el('h3', '', title), el('p', '', detail)); return card;
@@ -85,13 +93,19 @@ function render() {
   $('connect').classList.toggle('hidden', connected);
   $('disconnect').classList.toggle('hidden', !connected);
   $('refresh').classList.toggle('hidden', !connected);
-  const titles = { overview: 'In your rotation', tracks: 'Your top tracks', artists: 'Your top artists', recent: 'Recently in your room' };
+  const titles = { overview: 'In your rotation', tracks: 'Your top tracks', artists: 'Your top artists', recent: 'Recently in your room', explore: 'Follow the connections' };
   $('view-title').textContent = titles[view];
   document.querySelectorAll('[data-view]').forEach(b => { b.classList.toggle('active', b.dataset.view === view); b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'); });
   document.querySelector('.ranges').classList.toggle('hidden', view === 'recent');
-  const tracks = data.tracks || [];
+  const exploreOnly = view === 'explore';
+  document.querySelector('.collection-grid').classList.toggle('hidden', exploreOnly);
+  $('highlights').classList.toggle('hidden', exploreOnly);
+  $('exploration').classList.toggle('hidden', !['overview','explore'].includes(view));
+  const tracks = (data.tracks || []).filter(t => !exploration.excluded(t));
   const artists = data.artists || [];
-  const recent = data.recent?.items || [];
+  const recent = (data.recent?.items || []).filter(p => p.track && !exploration.excluded(p.track));
+  const songs = songsFrom(data), flagged = songs.filter(t => classify(t)), removed = songs.filter(t => exploration.excluded(t));
+  $('noise-summary').textContent = `${flagged.length} likely ASMR / noise tracks detected · ${removed.length} excluded. Title, artist & album labels only; review or override in Explore → song list. Artist rankings remain Spotify’s original rankings.`;
   const topTrack = tracks[0]; const topArtist = artists[0];
   $('highlights').replaceChildren(
     highlight('YOUR LEADING TRACK', topTrack?.name || 'No ranking yet', topTrack ? artistNames(topTrack) : 'Listen a little more, then check back.', '↗'),
@@ -122,6 +136,7 @@ function render() {
   $('coverage-note').textContent = connected
     ? `Updated ${lastLoaded ? new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(lastLoaded) : 'just now'}. Spotify rankings reflect affinity, not exact play counts. Recent records are a limited snapshot of listening history.`
     : 'This is an illustrative preview. Connect Spotify to load your own rankings and recent listening.';
+  exploration.update(data, connected);
 }
 function notice(message) { $('notice').textContent = message; $('notice').classList.toggle('hidden', !message); }
 async function load() {
@@ -150,7 +165,7 @@ $('connect').addEventListener('click', async () => {
   try { await beginLogin(); } catch { notice('Could not begin login. Allow session storage for this site and try again.'); $('connect').disabled = false; }
 });
 $('disconnect').addEventListener('click', () => {
-  generation++; client?.close(); client = null; connected = false; data = { ...demo }; errors = {}; lastLoaded = null;
+  generation++; client?.close(); client = null; connected = false; data = { ...demo }; errors = {}; lastLoaded = null; exploration.reset();
   session.clear(); clearPendingLogin(); $('profile-name').textContent = 'Welcome in.'; $('loading').classList.add('hidden'); $('refresh').disabled = false; $('search').value = '';
   notice('Disconnected. Your session and loaded data have been cleared from this tab.'); render();
 });
@@ -162,6 +177,7 @@ document.querySelectorAll('[data-range]').forEach(button => button.addEventListe
   if (connected) { data.tracks = []; data.artists = []; render(); load(); } else render();
 }));
 $('search').addEventListener('input', render);
+$('hide-noise').addEventListener('change', event => { exploration.setNoise(event.target.checked); render(); });
 $('refresh').addEventListener('click', load);
 $('privacy-button').addEventListener('click', () => $('privacy-dialog').showModal());
 // Privacy remains reachable on narrow screens through the footer.
